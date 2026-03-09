@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Temple of Dendur — AR Experience</title>
+
+  <!-- A-Frame 1.3 (stable, widely tested with AR.js) -->
+  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@v1.3.0/dist/aframe-master.min.js"></script>
+  <!-- AR.js stable release via jsDelivr -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #000;
+      font-family: 'EB Garamond', Georgia, serif;
+      overflow: hidden;
+    }
+
+    /* ── LOADING SCREEN ── */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: #0a0703;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.8s ease;
+    }
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .loader-title {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(1.4rem, 5vw, 2.2rem);
+      color: #d4a853;
+      letter-spacing: 0.15em;
+      text-align: center;
+      margin-bottom: 0.4rem;
+    }
+    .loader-sub {
+      font-size: 0.95rem;
+      color: #8a7a5a;
+      letter-spacing: 0.1em;
+      margin-bottom: 2.5rem;
+      font-style: italic;
+    }
+    .loader-bar-wrap {
+      width: 200px;
+      height: 2px;
+      background: #2a2015;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+    .loader-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #b07d3a, #d4a853);
+      width: 0%;
+      animation: loadProgress 2.5s ease-out forwards;
+    }
+    @keyframes loadProgress {
+      0%   { width: 0%; }
+      60%  { width: 70%; }
+      100% { width: 100%; }
+    }
+    .loader-msg {
+      font-size: 0.8rem;
+      color: #5a4d35;
+      letter-spacing: 0.08em;
+    }
+    .scarab {
+      font-size: 2.5rem;
+      margin-bottom: 1.5rem;
+      animation: scarabFloat 2s ease-in-out infinite;
+    }
+    @keyframes scarabFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    /* ── INSTRUCTIONS PANEL (shown before marker is found) ── */
+    #instructions {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(to top, rgba(10,7,3,0.97) 0%, rgba(10,7,3,0.85) 80%, transparent 100%);
+      padding: 1.5rem 1.5rem 2rem;
+      z-index: 100;
+      text-align: center;
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    #instructions.hidden {
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+    }
+    .instructions-title {
+      font-family: 'Cinzel', serif;
+      font-size: 1.05rem;
+      color: #d4a853;
+      letter-spacing: 0.12em;
+      margin-bottom: 0.5rem;
+    }
+    .instructions-body {
+      font-size: 0.9rem;
+      color: #c9b58a;
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+    .marker-preview {
+      display: inline-block;
+      border: 2px solid #d4a853;
+      border-radius: 4px;
+      padding: 6px;
+      background: white;
+      margin-bottom: 0.8rem;
+    }
+    .marker-preview svg {
+      display: block;
+      width: 80px;
+      height: 80px;
+    }
+    .instructions-hint {
+      font-size: 0.75rem;
+      color: #5a4d35;
+      font-style: italic;
+    }
+    #marker-link {
+      display: inline-block;
+      margin-top: 0.6rem;
+      padding: 0.45rem 1.2rem;
+      background: transparent;
+      border: 1px solid #d4a853;
+      color: #d4a853;
+      font-family: 'Cinzel', serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      border-radius: 2px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #marker-link:active { background: rgba(212,168,83,0.15); }
+
+    /* ── INFO PANEL (shown when marker is tracked) ── */
+    #info-panel {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: linear-gradient(to bottom, rgba(10,7,3,0.95) 0%, transparent 100%);
+      padding: 1.2rem 1.5rem 2rem;
+      z-index: 100;
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+      pointer-events: none;
+    }
+    #info-panel.visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+    .info-title {
+      font-family: 'Cinzel', serif;
+      font-size: 1.1rem;
+      color: #d4a853;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.15rem;
+    }
+    .info-subtitle {
+      font-size: 0.8rem;
+      color: #8a7a5a;
+      font-style: italic;
+      letter-spacing: 0.06em;
+    }
+    .info-badge {
+      display: inline-block;
+      margin-top: 0.4rem;
+      padding: 0.2rem 0.6rem;
+      background: rgba(212,168,83,0.15);
+      border: 1px solid rgba(212,168,83,0.4);
+      border-radius: 20px;
+      font-size: 0.7rem;
+      color: #d4a853;
+      letter-spacing: 0.08em;
+      font-family: 'Cinzel', serif;
+    }
+
+    /* ── FACT TICKER ── */
+    #fact-ticker {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(10,7,3,0.9);
+      border-top: 1px solid rgba(212,168,83,0.25);
+      padding: 0.6rem 1.5rem;
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    #fact-ticker.visible { opacity: 1; }
+    .ticker-label {
+      font-family: 'Cinzel', serif;
+      font-size: 0.62rem;
+      color: #d4a853;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.2rem;
+    }
+    .ticker-text {
+      font-size: 0.82rem;
+      color: #c9b58a;
+      font-style: italic;
+      line-height: 1.4;
+    }
+
+    /* ── SCAN RING ── */
+    #scan-ring {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -60%);
+      width: 200px;
+      height: 200px;
+      z-index: 50;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    #scan-ring.hidden { display: none; }
+    .ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid rgba(212,168,83,0.6);
+      animation: ringPulse 2s ease-out infinite;
+    }
+    .ring:nth-child(2) { animation-delay: 0.7s; }
+    .ring:nth-child(3) { animation-delay: 1.4s; }
+    @keyframes ringPulse {
+      0%   { transform: scale(0.4); opacity: 0.9; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    .crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 30px; height: 30px;
+    }
+    .crosshair::before, .crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(212,168,83,0.8);
+    }
+    .crosshair::before { width: 100%; height: 1px; top: 50%; left: 0; }
+    .crosshair::after  { width: 1px; height: 100%; left: 50%; top: 0; }
+
+    /* A-Frame scene fills the whole viewport */
+    a-scene { width: 100vw; height: 100vh; }
+
+    /* Permission prompt overlay */
+    #cam-prompt {
+      position: fixed;
+      inset: 0;
+      background: #0a0703;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      text-align: center;
+      padding: 2rem;
+      display: none;
+    }
+    #cam-prompt h2 {
+      font-family: 'Cinzel', serif;
+      color: #d4a853;
+      font-size: 1.3rem;
+      margin-bottom: 1rem;
+      letter-spacing: 0.1em;
+    }
+    #cam-prompt p { color: #c9b58a; font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem; }
+    #cam-btn {
+      padding: 0.7rem 2rem;
+      background: #d4a853;
+      color: #0a0703;
+      border: none;
+      font-family: 'Cinzel', serif;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ── LOADING SCREEN ── -->
+<div id="loading-screen">
+  <div class="scarab">𓆣</div>
+  <div class="loader-title">TEMPLE OF DENDUR</div>
+  <div class="loader-sub">circa 15 B.C. · Lower Nubia</div>
+  <div class="loader-bar-wrap"><div class="loader-bar"></div></div>
+  <div class="loader-msg">Initialising AR camera…</div>
+</div>
+
+<!-- ── CAMERA PERMISSION PROMPT ── -->
+<div id="cam-prompt">
+  <h2>Camera Access Required</h2>
+  <p>This AR experience needs your camera to detect the Hiro marker and render the temple in your space.</p>
+  <button id="cam-btn" onclick="document.getElementById('cam-prompt').style.display='none'; startAR();">Enable Camera</button>
+</div>
+
+<!-- ── SCAN RING (shown while searching for marker) ── -->
+<div id="scan-ring">
+  <div class="ring"></div>
+  <div class="ring"></div>
+  <div class="ring"></div>
+  <div class="crosshair"></div>
+</div>
+
+<!-- ── INFO PANEL (top — shown when tracking) ── -->
+<div id="info-panel">
+  <div class="info-title">TEMPLE OF DENDUR</div>
+  <div class="info-subtitle">Originally built on the banks of the Nile · Lower Nubia</div>
+  <div class="info-badge">𓂀 &nbsp;15 B.C. · Emperor Augustus</div>
+</div>
+
+<!-- ── INSTRUCTIONS (bottom — shown while searching) ── -->
+<div id="instructions">
+  <div class="instructions-title">POINT YOUR CAMERA AT THE HIRO MARKER</div>
+  <div class="instructions-body">
+    Print or display the marker below on another screen.<br>
+    Hold your phone 20–50 cm away, flat and well-lit.
+  </div>
+  <div class="marker-preview">
+    <!-- Simplified Hiro marker SVG representation -->
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" fill="white"/>
+      <rect x="10" y="10" width="80" height="80" fill="black"/>
+      <rect x="20" y="20" width="60" height="60" fill="white"/>
+      <!-- Hiro inner pattern approximation -->
+      <rect x="25" y="25" width="10" height="10" fill="black"/>
+      <rect x="42" y="25" width="16" height="10" fill="black"/>
+      <rect x="65" y="25" width="10" height="10" fill="black"/>
+      <rect x="25" y="42" width="10" height="16" fill="black"/>
+      <rect x="65" y="42" width="10" height="16" fill="black"/>
+      <rect x="25" y="65" width="10" height="10" fill="black"/>
+      <rect x="42" y="65" width="16" height="10" fill="black"/>
+      <rect x="65" y="65" width="10" height="10" fill="black"/>
+      <rect x="38" y="38" width="24" height="24" fill="black"/>
+      <rect x="44" y="44" width="12" height="12" fill="white"/>
+    </svg>
+  </div>
+  <br/>
+  <a id="marker-link" href="https://raw.githubusercontent.com/AR-js-org/AR.js/master/data/images/hiro.png" target="_blank">
+    🔗 OPEN FULL HIRO MARKER
+  </a>
+  <div class="instructions-hint" style="margin-top:0.8rem;">
+    No app download required · Works in Safari &amp; Chrome
+  </div>
+</div>
+
+<!-- ── HISTORICAL FACT TICKER (bottom — shown when tracking) ── -->
+<div id="fact-ticker">
+  <div class="ticker-label">𓂀 &nbsp;HISTORICAL RECORD</div>
+  <div class="ticker-text" id="ticker-text"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     THE AR SCENE
+     ══════════════════════════════════════════════ -->
+<a-scene
+  id="ar-scene"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  renderer="logarithmicDepthBuffer: true; antialias: true;"
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+>
+
+  <!-- ── ASSETS ── -->
+  <a-assets timeout="30000">
+    <!--
+      NOTE: Replace the src values below with your own files:
+        - dendur.glb  → a photogrammetry scan from Sketchfab/Met Open Access
+        - nile.jpg    → an equirectangular Nile panorama (4096×2048 recommended)
+
+      For a working DEMO without those files, the scene uses procedural geometry
+      (see the temple-proxy group below) that mimics the temple silhouette.
+    -->
+  </a-assets>
+
+  <!-- ── HIRO MARKER ── -->
+  <a-marker preset="hiro" id="hiro-marker" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+
+    <!-- ══ GROUND PLANE — Desert Sand ══ -->
+    <a-cylinder
+      radius="3.2"
+      height="0.08"
+      color="#c9a96e"
+      roughness="1"
+      metalness="0"
+      position="0 0 0"
+      shadow="receive: true"
+    ></a-cylinder>
+
+    <!-- Sand texture ripples -->
+    <a-torus radius="1.2" radius-tubular="0.015" color="#b8975a" rotation="-90 0 0" position="0 0.05 0" opacity="0.5"></a-torus>
+    <a-torus radius="2.0" radius-tubular="0.012" color="#b8975a" rotation="-90 0 0" position="0 0.05 0" opacity="0.35"></a-torus>
+    <a-torus radius="2.8" radius-tubular="0.01"  color="#b8975a" rotation="-90 0 0" position="0 0.05 0" opacity="0.25"></a-torus>
+
+    <!-- ══ NILE ENVIRONMENT BACKDROP ══ -->
+    <!--
+      When you have nile.jpg, uncomment this block and delete the procedural sky below:
+
+      <a-curvedimage
+        src="#nileBackground"
+        radius="3.0"
+        theta-length="220"
+        height="4"
+        position="0 1.8 0"
+        rotation="0 180 0"
+        opacity="0.95">
+      </a-curvedimage>
+    -->
+
+    <!-- ── PROCEDURAL SKY (placeholder until real panorama is added) ── -->
+    <a-entity id="sky-backdrop">
+      <!-- Sky dome gradient using a hemisphere -->
+      <a-sphere
+        radius="3.1"
+        theta-start="0"
+        theta-length="90"
+        color="#2a6496"
+        side="back"
+        position="0 0 0"
+        opacity="0.85"
+        material="shader: flat;"
+      ></a-sphere>
+
+      <!-- Horizon glow band -->
+      <a-torus
+        radius="3.0"
+        radius-tubular="0.6"
+        color="#e8a040"
+        position="0 0.2 0"
+        rotation="-90 0 0"
+        opacity="0.18"
+        material="shader: flat;"
+      ></a-torus>
+
+      <!-- "Nile" water plane behind the temple -->
+      <a-plane
+        width="6" height="2"
+        color="#1e5a7a"
+        rotation="-90 0 0"
+        position="0 0.01 -2.2"
+        opacity="0.6"
+        material="shader: flat;"
+      ></a-plane>
+      <!-- Water shimmer strips -->
+      <a-plane width="5" height="0.04" color="#5aafd4" rotation="-90 0 0" position="0 0.02 -1.8" opacity="0.4" material="shader: flat;"></a-plane>
+      <a-plane width="4" height="0.03" color="#5aafd4" rotation="-90 0 0" position="0 0.02 -2.1" opacity="0.35" material="shader: flat;"></a-plane>
+      <a-plane width="4.5" height="0.03" color="#5aafd4" rotation="-90 0 0" position="0 0.02 -2.4" opacity="0.3" material="shader: flat;"></a-plane>
+
+      <!-- Rocky cliffs (left & right sides) -->
+      <!-- Left cliff -->
+      <a-box width="1.2" height="2.5" depth="0.6" color="#7a5c3a" position="-2.6 1.1 -1.5" rotation="0 15 0" opacity="0.9"></a-box>
+      <a-box width="0.9" height="1.8" depth="0.5" color="#6a4e2e" position="-2.2 0.8 -1.2" rotation="0 10 0" opacity="0.9"></a-box>
+      <a-box width="0.7" height="1.2" depth="0.4" color="#7a5c3a" position="-2.9 0.5 -1.8" rotation="0 20 0" opacity="0.9"></a-box>
+      <!-- Right cliff -->
+      <a-box width="1.2" height="2.2" depth="0.6" color="#7a5c3a" position="2.6 1.0 -1.5" rotation="0 -15 0" opacity="0.9"></a-box>
+      <a-box width="0.8" height="1.6" depth="0.5" color="#6a4e2e" position="2.2 0.7 -1.2" rotation="0 -10 0" opacity="0.9"></a-box>
+      <a-box width="0.6" height="1.0" depth="0.4" color="#7a5c3a" position="2.9 0.4 -1.8" rotation="0 -20 0" opacity="0.9"></a-box>
+
+      <!-- Palm trees (silhouette) -->
+      <a-entity position="-1.8 0 -2.2">
+        <a-cylinder radius="0.04" height="1.2" color="#4a3520" position="0 0.6 0"></a-cylinder>
+        <a-cone radius-bottom="0.5" radius-top="0.05" height="0.6" color="#2d5a27" position="0 1.3 0"></a-cone>
+      </a-entity>
+      <a-entity position="1.8 0 -2.4">
+        <a-cylinder radius="0.035" height="1.0" color="#4a3520" position="0 0.5 0"></a-cylinder>
+        <a-cone radius-bottom="0.45" radius-top="0.05" height="0.55" color="#2d5a27" position="0 1.1 0"></a-cone>
+      </a-entity>
+    </a-entity>
+
+    <!-- ══ TEMPLE OF DENDUR — Procedural Geometry ══
+         Replace <a-entity id="temple-proxy"> with:
+         <a-gltf-model src="#templeModel" position="0 0.08 -0.4" scale="0.05 0.05 0.05" shadow="cast: true; receive: true">
+         when you have your .glb from Sketchfab / Met Open Access.
+    -->
+    <a-entity id="temple-proxy" position="0 0.08 -0.3" scale="1 1 1">
+
+      <!-- ── PLATFORM / PODIUM ── -->
+      <a-box width="1.8" height="0.12" depth="0.9" color="#d4c4a0" position="0 0 0"></a-box>
+      <a-box width="1.6" height="0.08" depth="0.8" color="#c9b890" position="0 0.1 0"></a-box>
+
+      <!-- ── GATEWAY PYLON (front entrance) ── -->
+      <!-- Left pylon tower -->
+      <a-box width="0.3" height="0.85" depth="0.25" color="#c8b48a" position="-0.4 0.5 0.25"></a-box>
+      <!-- Right pylon tower -->
+      <a-box width="0.3" height="0.85" depth="0.25" color="#c8b48a" position="0.4 0.5 0.25"></a-box>
+      <!-- Pylon lintel (top beam) -->
+      <a-box width="1.0" height="0.12" depth="0.26" color="#b8a47a" position="0 0.93 0.25"></a-box>
+      <!-- Doorway (dark recess) -->
+      <a-box width="0.22" height="0.55" depth="0.28" color="#2a1f10" position="0 0.4 0.25"></a-box>
+
+      <!-- ── PRONAOS / VESTIBULE COLUMNS ── -->
+      <!-- Front columns (between pylon and sanctuary) -->
+      <a-cylinder radius="0.05" height="0.72" color="#d0c09a" position="-0.28 0.46 0.0"></a-cylinder>
+      <a-cylinder radius="0.05" height="0.72" color="#d0c09a" position=" 0.28 0.46 0.0"></a-cylinder>
+      <!-- Column capitals (simple torus) -->
+      <a-torus radius="0.07" radius-tubular="0.018" color="#c0aa80" rotation="90 0 0" position="-0.28 0.84 0.0"></a-torus>
+      <a-torus radius="0.07" radius-tubular="0.018" color="#c0aa80" rotation="90 0 0" position=" 0.28 0.84 0.0"></a-torus>
+      <!-- Architrave over vestibule -->
+      <a-box width="0.85" height="0.08" depth="0.22" color="#b8a47a" position="0 0.88 0.0"></a-box>
+
+      <!-- ── SANCTUARY (inner temple box) ── -->
+      <a-box width="0.78" height="0.72" depth="0.55" color="#cabb95" position="0 0.46 -0.25">
+        <!-- Window niches on sides (inset boxes) -->
+      </a-box>
+      <!-- Sanctuary roof -->
+      <a-box width="0.84" height="0.1" depth="0.6" color="#b0a07a" position="0 0.86 -0.25"></a-box>
+      <!-- Sanctuary doorway -->
+      <a-box width="0.2" height="0.48" depth="0.56" color="#1a1208" position="0 0.34 -0.25"></a-box>
+
+      <!-- ── REAR WALL (enclosure) ── -->
+      <a-box width="1.0" height="0.55" depth="0.08" color="#c0b08a" position="0 0.38 -0.55"></a-box>
+      <a-box width="1.0" height="0.08" depth="0.08" color="#a89870" position="0 0.68 -0.55"></a-box>
+
+      <!-- ── DECORATIVE CORNICHE (top edge moulding) ── -->
+      <!-- On pylon -->
+      <a-box width="1.05" height="0.04" depth="0.06" color="#a08860" position="0 1.01 0.25"></a-box>
+      <!-- On sanctuary -->
+      <a-box width="0.9" height="0.04" depth="0.06" color="#a08860" position="0 0.92 -0.25"></a-box>
+
+      <!-- ── HIEROGLYPH ENGRAVINGS (relief suggestion using thin dark planes) ── -->
+      <!-- Left pylon face -->
+      <a-plane width="0.18" height="0.5" color="#b5a07a" position="-0.4 0.48 0.38" rotation="0 0 0" opacity="0.6"></a-plane>
+      <a-box width="0.12" height="0.04" depth="0.01" color="#8a7050" position="-0.4 0.65 0.385" opacity="0.5"></a-box>
+      <a-box width="0.08" height="0.04" depth="0.01" color="#8a7050" position="-0.4 0.55 0.385" opacity="0.5"></a-box>
+      <a-box width="0.10" height="0.04" depth="0.01" color="#8a7050" position="-0.4 0.45 0.385" opacity="0.5"></a-box>
+      <!-- Right pylon face -->
+      <a-plane width="0.18" height="0.5" color="#b5a07a" position="0.4 0.48 0.38" rotation="0 0 0" opacity="0.6"></a-plane>
+      <a-box width="0.12" height="0.04" depth="0.01" color="#8a7050" position="0.4 0.62 0.385" opacity="0.5"></a-box>
+      <a-box width="0.10" height="0.04" depth="0.01" color="#8a7050" position="0.4 0.52 0.385" opacity="0.5"></a-box>
+      <a-box width="0.08" height="0.04" depth="0.01" color="#8a7050" position="0.4 0.42 0.385" opacity="0.5"></a-box>
+
+      <!-- ── OFFERING TABLE (small altar in front) ── -->
+      <a-box width="0.18" height="0.05" depth="0.12" color="#a08055" position="0 0.18 0.45"></a-box>
+      <a-cylinder radius="0.025" height="0.1" color="#a08055" position="-0.06 0.12 0.45"></a-cylinder>
+      <a-cylinder radius="0.025" height="0.1" color="#a08055" position=" 0.06 0.12 0.45"></a-cylinder>
+
+      <!-- ── CAUSEWAY STEPS leading into water ── -->
+      <a-box width="1.0" height="0.04" depth="0.18" color="#c0a870" position="0 0.06 0.55"></a-box>
+      <a-box width="0.9" height="0.04" depth="0.15" color="#b09a62" position="0 0.02 0.7"></a-box>
+    </a-entity>
+
+    <!-- ══ LIGHTING ══ -->
+    <!-- Egyptian midday sun -->
+    <a-light type="directional" color="#fff5d6" intensity="1.6" position="-1.5 3 1.5" cast-shadow="true"></a-light>
+    <!-- Sky ambient -->
+    <a-light type="ambient" color="#b0c8d8" intensity="0.55"></a-light>
+    <!-- Warm ground bounce -->
+    <a-light type="point" color="#c9a050" intensity="0.4" position="0 0.05 0" distance="5" decay="2"></a-light>
+
+    <!-- ══ ATMOSPHERIC PARTICLES (dust motes) ══ -->
+    <a-entity id="dust-particles">
+      <a-sphere radius="0.008" color="#e8d4a0" opacity="0.5" position=" 0.3 0.6 0.1" animation="property: position; to: 0.35 0.9 0.05; dur: 4000; easing: easeInOutSine; loop: true; dir: alternate;"></a-sphere>
+      <a-sphere radius="0.006" color="#e8d4a0" opacity="0.4" position="-0.4 0.5 0.2" animation="property: position; to: -0.38 0.85 0.15; dur: 5500; easing: easeInOutSine; loop: true; dir: alternate;"></a-sphere>
+      <a-sphere radius="0.007" color="#e8d4a0" opacity="0.45" position=" 0.1 0.8 -0.3" animation="property: position; to: 0.15 1.1 -0.25; dur: 3800; easing: easeInOutSine; loop: true; dir: alternate;"></a-sphere>
+    </a-entity>
+
+    <!-- ══ ANIMATED WATER SHIMMER ══ -->
+    <a-plane
+      width="5" height="0.06"
+      color="#88ccee"
+      rotation="-90 0 0"
+      position="0 0.03 -1.9"
+      opacity="0.5"
+      material="shader: flat;"
+      animation="property: opacity; from: 0.3; to: 0.65; dur: 2000; easing: easeInOutSine; loop: true; dir: alternate;"
+    ></a-plane>
+    <a-plane
+      width="4.5" height="0.04"
+      color="#70bbdd"
+      rotation="-90 0 0"
+      position="0 0.03 -2.2"
+      opacity="0.45"
+      material="shader: flat;"
+      animation="property: opacity; from: 0.25; to: 0.6; dur: 2700; easing: easeInOutSine; loop: true; dir: alternate;"
+    ></a-plane>
+
+  </a-marker>
+
+  <!-- AR Camera -->
+  <a-entity camera></a-entity>
+
+</a-scene>
+
+<!-- ══════════════════════════════════════════════
+     JAVASCRIPT
+     ══════════════════════════════════════════════ -->
+<script>
+  /* ── Historical facts carousel ── */
+  const facts = [
+    "Built around 15 B.C. on order of Emperor Augustus to honor local Nubian deities Pediese and Pihor.",
+    "Originally stood on the rocky west bank of the Nile, 50 miles south of Aswan in Lower Nubia.",
+    "Dismantled stone by stone in 1963 to rescue it from the rising waters of Lake Nasser created by the Aswan High Dam.",
+    "Egypt gifted the temple to the United States in 1965 in gratitude for American help saving Nubian monuments.",
+    "Reassembled inside The Metropolitan Museum of Art in 1978. The Sackler Wing was built specifically to house it.",
+    "The temple is dedicated to the Nubian gods Pediese and Pihor — brothers who were deified after drowning in the Nile.",
+    "Its hieroglyphs show Augustus wearing the double crown of Egypt, depicted as a pharaoh making offerings to Isis and Osiris.",
+    "The gateway pylon still bears the cartouche of Augustus — the only Roman emperor whose name appears in hieroglyphs.",
+    "Entire stones retain traces of original polychrome pigments: red, blue, and yellow — once brilliantly painted.",
+  ];
+  let factIndex = 0;
+  const tickerEl = document.getElementById('ticker-text');
+
+  function rotateFact() {
+    tickerEl.style.opacity = 0;
+    setTimeout(() => {
+      tickerEl.textContent = facts[factIndex % facts.length];
+      tickerEl.style.transition = 'opacity 0.8s';
+      tickerEl.style.opacity = 1;
+      factIndex++;
+    }, 400);
+  }
+
+  /* ── UI State ── */
+  const loadingScreen  = document.getElementById('loading-screen');
+  const instructions   = document.getElementById('instructions');
+  const infoPanel      = document.getElementById('info-panel');
+  const factTicker     = document.getElementById('fact-ticker');
+  const scanRing       = document.getElementById('scan-ring');
+
+  let markerVisible = false;
+  let factInterval  = null;
+
+  function onMarkerFound() {
+    if (markerVisible) return;
+    markerVisible = true;
+
+    instructions.classList.add('hidden');
+    scanRing.classList.add('hidden');
+    infoPanel.classList.add('visible');
+    factTicker.classList.add('visible');
+
+    rotateFact();
+    factInterval = setInterval(rotateFact, 7000);
+  }
+
+  function onMarkerLost() {
+    if (!markerVisible) return;
+    markerVisible = false;
+
+    infoPanel.classList.remove('visible');
+    factTicker.classList.remove('visible');
+    instructions.classList.remove('hidden');
+    scanRing.classList.remove('hidden');
+
+    if (factInterval) { clearInterval(factInterval); factInterval = null; }
+  }
+
+  /* ── Wire up A-Frame marker events after scene loads ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    // Hide loading screen after A-Frame + AR.js initialise
+    const scene = document.getElementById('ar-scene');
+
+    const hideLoader = () => {
+      loadingScreen.classList.add('hidden');
+      setTimeout(() => { loadingScreen.style.display = 'none'; }, 900);
+    };
+
+    if (scene.hasLoaded) {
+      setTimeout(hideLoader, 1200);
+    } else {
+      scene.addEventListener('loaded', () => setTimeout(hideLoader, 1200));
+    }
+
+    // Fallback: hide after 4s regardless
+    setTimeout(hideLoader, 4000);
+
+    // Marker tracking events
+    const marker = document.getElementById('hiro-marker');
+    marker.addEventListener('markerFound',  onMarkerFound);
+    marker.addEventListener('markerLost',   onMarkerLost);
+  });
+</script>
+
+</body>
+</html>
