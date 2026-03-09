@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Temple of Dendur — AR</title>
+
+  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+
+    #loading {
+      position: fixed; inset: 0; background: #080502;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 9999; transition: opacity 1s ease;
+    }
+    #loading.fade { opacity: 0; pointer-events: none; }
+    #loading h1 {
+      font-family: 'Cinzel', serif; color: #d4a853;
+      font-size: clamp(1.3rem, 6vw, 2rem);
+      letter-spacing: 0.2em; margin-bottom: 0.3rem;
+    }
+    #loading p { color: #7a6a45; font-family: 'EB Garamond', serif; font-style: italic; font-size: 0.95rem; margin-bottom: 2rem; }
+    .bar-wrap { width: 180px; height: 2px; background: #2a1f0e; border-radius: 2px; overflow: hidden; }
+    .bar { height: 100%; background: linear-gradient(90deg,#8a5a20,#d4a853); animation: barLoad 3s ease-out forwards; }
+    @keyframes barLoad { 0%{width:0} 100%{width:100%} }
+    #loading .glyph { font-size: 3rem; margin-bottom: 1.5rem; animation: bob 2s ease-in-out infinite; }
+    @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+
+    #hud-top {
+      position: fixed; top: 0; left: 0; right: 0;
+      padding: 1rem 1.2rem 2.5rem;
+      background: linear-gradient(to bottom, rgba(5,3,1,0.92) 0%, transparent 100%);
+      z-index: 100; pointer-events: none;
+      opacity: 0; transition: opacity 0.8s;
+    }
+    #hud-top.show { opacity: 1; }
+    #hud-top h2 { font-family:'Cinzel',serif; color:#d4a853; font-size:1rem; letter-spacing:0.12em; }
+    #hud-top p  { font-family:'EB Garamond',serif; color:#8a7a5a; font-style:italic; font-size:0.8rem; margin-top:0.15rem; }
+    .badge {
+      display:inline-block; margin-top:0.4rem;
+      padding:0.15rem 0.6rem;
+      background:rgba(212,168,83,0.12); border:1px solid rgba(212,168,83,0.35);
+      border-radius:20px; color:#d4a853;
+      font-family:'Cinzel',serif; font-size:0.65rem; letter-spacing:0.08em;
+    }
+
+    #hud-bottom {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 2.5rem 1.2rem 1.5rem;
+      background: linear-gradient(to top, rgba(5,3,1,0.92) 0%, transparent 100%);
+      z-index: 100; text-align: center;
+      transition: opacity 0.6s, transform 0.6s;
+    }
+    #hud-bottom.hide { opacity: 0; pointer-events: none; transform: translateY(10px); }
+
+    #tap-hint {
+      font-family:'Cinzel',serif; color:#d4a853;
+      font-size:0.95rem; letter-spacing:0.15em; margin-bottom:1rem;
+    }
+    #tap-hint span { display:inline-block; animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+    #btn-place {
+      display: inline-block;
+      padding: 0.7rem 2.2rem;
+      background: rgba(212,168,83,0.15);
+      border: 1.5px solid #d4a853;
+      color: #d4a853;
+      font-family: 'Cinzel', serif;
+      font-size: 0.8rem; letter-spacing: 0.15em;
+      border-radius: 2px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    #btn-place:active { background: rgba(212,168,83,0.3); }
+
+    #fact-box {
+      font-family:'EB Garamond',serif; font-style:italic;
+      color:#c9b580; font-size:0.88rem; line-height:1.55;
+      opacity: 0; transition: opacity 0.6s;
+      border-top:1px solid rgba(212,168,83,0.2);
+      padding-top:0.8rem; margin-top:0.8rem;
+    }
+    #fact-box.show { opacity: 1; }
+    .fact-label {
+      font-family:'Cinzel',serif; font-size:0.6rem;
+      color:#d4a853; letter-spacing:0.15em;
+      display:block; margin-bottom:0.35rem;
+    }
+
+    #btn-reset {
+      position: fixed; top: 1rem; right: 1rem; z-index: 200;
+      padding: 0.4rem 0.9rem;
+      background: rgba(5,3,1,0.8);
+      border: 1px solid rgba(212,168,83,0.4);
+      color: #d4a853;
+      font-family: 'Cinzel', serif; font-size: 0.65rem;
+      letter-spacing: 0.1em; border-radius: 2px;
+      cursor: pointer; display: none;
+    }
+
+    a-scene { position: fixed; inset: 0; }
+  </style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="glyph">𓀭</div>
+  <h1>TEMPLE OF DENDUR</h1>
+  <p>circa 15 B.C. &middot; Lower Nubia</p>
+  <div class="bar-wrap"><div class="bar"></div></div>
+</div>
+
+<div id="hud-top">
+  <h2>TEMPLE OF DENDUR</h2>
+  <p>Nile riverbank &middot; Lower Nubia</p>
+  <div class="badge">𓂀 &nbsp;15 B.C. &middot; Emperor Augustus</div>
+</div>
+
+<div id="hud-bottom">
+  <div id="tap-hint"><span>◈</span> &nbsp;TAP ANYWHERE TO PLACE THE TEMPLE</div>
+  <button id="btn-place" onclick="placeTemple()">PLACE TEMPLE</button>
+  <div id="fact-box">
+    <span class="fact-label">𓂀 &nbsp;HISTORICAL RECORD</span>
+    <span id="fact-text"></span>
+  </div>
+</div>
+
+<button id="btn-reset" onclick="resetTemple()">↺ RESET</button>
+
+<a-scene
+  id="scene"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
+  renderer="antialias: true; logarithmicDepthBuffer: true;"
+  vr-mode-ui="enabled: false"
+  loading-screen="enabled: false"
+>
+
+  <!-- Everything is grouped under temple-root, placed 2m in front of camera -->
+  <a-entity id="temple-root" visible="false" position="0 -0.5 -2">
+
+    <!-- Sand base -->
+    <a-cylinder radius="1.4" height="0.04" color="#c9a96e" roughness="1" position="0 0 0"></a-cylinder>
+    <a-torus radius="0.7"  radius-tubular="0.007" color="#b08040" rotation="-90 0 0" position="0 0.025 0" opacity="0.4" material="shader:flat;"></a-torus>
+    <a-torus radius="1.1"  radius-tubular="0.006" color="#b08040" rotation="-90 0 0" position="0 0.025 0" opacity="0.28" material="shader:flat;"></a-torus>
+
+    <!-- Rocky cliffs -->
+    <a-box width="0.65" height="1.3" depth="0.32" color="#7a5c3a" position="-1.05 0.62 -0.75" rotation="0 18 0"></a-box>
+    <a-box width="0.48" height="0.95" depth="0.28" color="#6a4e2e" position="-0.85 0.43 -0.58" rotation="0 8 0"></a-box>
+    <a-box width="0.6"  height="1.15" depth="0.3"  color="#7a5c3a" position=" 1.05 0.52 -0.75" rotation="0 -18 0"></a-box>
+    <a-box width="0.42" height="0.85" depth="0.26" color="#6a4e2e" position=" 0.85 0.38 -0.58" rotation="0 -8 0"></a-box>
+
+    <!-- Nile water -->
+    <a-plane width="3" height="0.9" color="#1e5a7a" rotation="-90 0 0" position="0 0.01 -1.05" opacity="0.55" material="shader:flat;"
+      animation="property:opacity; from:0.38; to:0.68; dur:2600; loop:true; dir:alternate; easing:easeInOutSine;"></a-plane>
+    <a-plane width="2.8" height="0.04" color="#88ccee" rotation="-90 0 0" position="0 0.02 -0.82" opacity="0.5" material="shader:flat;"
+      animation="property:opacity; from:0.22; to:0.58; dur:2000; loop:true; dir:alternate; easing:easeInOutSine;"></a-plane>
+    <a-plane width="2.5" height="0.03" color="#70bbdd" rotation="-90 0 0" position="0 0.02 -0.92" opacity="0.38" material="shader:flat;"
+      animation="property:opacity; from:0.18; to:0.52; dur:3200; loop:true; dir:alternate; easing:easeInOutSine;"></a-plane>
+
+    <!-- Sky -->
+    <a-sphere radius="1.44" theta-start="0" theta-length="82" color="#3a7ab5" side="back" position="0 0 0" opacity="0.65" material="shader:flat;"></a-sphere>
+    <a-torus radius="1.38" radius-tubular="0.28" color="#e88a20" position="0 0.08 0" rotation="-90 0 0" opacity="0.11" material="shader:flat;"></a-torus>
+
+    <!-- Palm trees -->
+    <a-entity position="-0.72 0 -0.82">
+      <a-cylinder radius="0.022" height="0.6" color="#4a3520" position="0 0.3 0"></a-cylinder>
+      <a-cone radius-bottom="0.22" radius-top="0.018" height="0.28" color="#2a5020" position="0 0.66 0"></a-cone>
+    </a-entity>
+    <a-entity position="0.78 0 -0.92">
+      <a-cylinder radius="0.018" height="0.52" color="#4a3520" position="0 0.26 0"></a-cylinder>
+      <a-cone radius-bottom="0.19" radius-top="0.015" height="0.25" color="#2a5020" position="0 0.58 0"></a-cone>
+    </a-entity>
+
+    <!-- ══ TEMPLE ══ -->
+    <a-entity position="0 0.04 -0.08">
+
+      <!-- Platform -->
+      <a-box width="0.88" height="0.055" depth="0.44" color="#d4c4a0" position="0 0 0"></a-box>
+      <a-box width="0.80" height="0.038" depth="0.40" color="#c9b890" position="0 0.046 0"></a-box>
+
+      <!-- Pylon — left tower -->
+      <a-box width="0.145" height="0.41" depth="0.125" color="#c8b48a" position="-0.195 0.245 0.125"></a-box>
+      <!-- Pylon — right tower -->
+      <a-box width="0.145" height="0.41" depth="0.125" color="#c8b48a" position=" 0.195 0.245 0.125"></a-box>
+      <!-- Pylon lintel -->
+      <a-box width="0.49" height="0.055" depth="0.13" color="#b8a47a" position="0 0.46 0.125"></a-box>
+      <!-- Doorway -->
+      <a-box width="0.105" height="0.27" depth="0.135" color="#1a1208" position="0 0.185 0.125"></a-box>
+      <!-- Pylon cornice -->
+      <a-box width="0.51" height="0.018" depth="0.028" color="#a08860" position="0 0.50 0.125"></a-box>
+
+      <!-- Columns -->
+      <a-cylinder radius="0.024" height="0.35" color="#d0c09a" position="-0.135 0.215 0.01"></a-cylinder>
+      <a-cylinder radius="0.024" height="0.35" color="#d0c09a" position=" 0.135 0.215 0.01"></a-cylinder>
+      <a-torus radius="0.033" radius-tubular="0.008" color="#c0aa80" rotation="90 0 0" position="-0.135 0.41 0.01"></a-torus>
+      <a-torus radius="0.033" radius-tubular="0.008" color="#c0aa80" rotation="90 0 0" position=" 0.135 0.41 0.01"></a-torus>
+      <a-box width="0.40" height="0.038" depth="0.105" color="#b8a47a" position="0 0.43 0.01"></a-box>
+
+      <!-- Sanctuary -->
+      <a-box width="0.38" height="0.35" depth="0.27" color="#cabb95" position="0 0.225 -0.125"></a-box>
+      <a-box width="0.41" height="0.048" depth="0.29" color="#b0a07a" position="0 0.42 -0.125"></a-box>
+      <a-box width="0.095" height="0.23" depth="0.28" color="#120d06" position="0 0.165 -0.125"></a-box>
+      <a-box width="0.43" height="0.018" depth="0.028" color="#a08860" position="0 0.45 -0.125"></a-box>
+
+      <!-- Rear wall -->
+      <a-box width="0.48" height="0.27" depth="0.038" color="#c0b08a" position="0 0.185 -0.27"></a-box>
+      <a-box width="0.48" height="0.028" depth="0.038" color="#a89870" position="0 0.33 -0.27"></a-box>
+
+      <!-- Hieroglyph markings -->
+      <a-box width="0.055" height="0.018" depth="0.004" color="#8a7050" position="-0.195 0.35 0.19" opacity="0.65"></a-box>
+      <a-box width="0.038" height="0.018" depth="0.004" color="#8a7050" position="-0.195 0.29 0.19" opacity="0.65"></a-box>
+      <a-box width="0.048" height="0.018" depth="0.004" color="#8a7050" position="-0.195 0.23 0.19" opacity="0.65"></a-box>
+      <a-box width="0.055" height="0.018" depth="0.004" color="#8a7050" position=" 0.195 0.33 0.19" opacity="0.65"></a-box>
+      <a-box width="0.038" height="0.018" depth="0.004" color="#8a7050" position=" 0.195 0.27 0.19" opacity="0.65"></a-box>
+      <a-box width="0.048" height="0.018" depth="0.004" color="#8a7050" position=" 0.195 0.21 0.19" opacity="0.65"></a-box>
+
+      <!-- Altar -->
+      <a-box width="0.085" height="0.022" depth="0.055" color="#a08055" position="0 0.08 0.215"></a-box>
+      <a-cylinder radius="0.011" height="0.045" color="#a08055" position="-0.028 0.058 0.215"></a-cylinder>
+      <a-cylinder radius="0.011" height="0.045" color="#a08055" position=" 0.028 0.058 0.215"></a-cylinder>
+
+      <!-- Steps -->
+      <a-box width="0.48" height="0.018" depth="0.085" color="#c0a870" position="0 0.028 0.268"></a-box>
+      <a-box width="0.43" height="0.018" depth="0.075" color="#b09a62" position="0 0.01 0.348"></a-box>
+
+      <!-- Dust motes -->
+      <a-sphere radius="0.0035" color="#e8d4a0" opacity="0.55" position="0.14 0.28 0.04"
+        animation="property:position; to:0.16 0.42 0.02; dur:3800; loop:true; dir:alternate; easing:easeInOutSine;"></a-sphere>
+      <a-sphere radius="0.0028" color="#e8d4a0" opacity="0.42" position="-0.18 0.22 0.09"
+        animation="property:position; to:-0.16 0.38 0.06; dur:5200; loop:true; dir:alternate; easing:easeInOutSine;"></a-sphere>
+    </a-entity>
+
+    <!-- Lighting -->
+    <a-light type="directional" color="#fff5d6" intensity="1.8" position="-1 3 1"></a-light>
+    <a-light type="ambient"     color="#b0c8d8" intensity="0.5"></a-light>
+    <a-light type="point"       color="#c9a050" intensity="0.4" position="0 0.1 0" distance="3" decay="2"></a-light>
+
+  </a-entity>
+
+  <a-entity camera look-controls="enabled:false"></a-entity>
+
+</a-scene>
+
+<script>
+  const facts = [
+    "Built around 15 B.C. on order of Emperor Augustus to honor Nubian gods Pediese and Pihor.",
+    "Originally stood on the rocky west bank of the Nile, 50 miles south of Aswan.",
+    "Dismantled stone by stone in 1963 to save it from the rising waters of Lake Nasser.",
+    "Egypt gifted the temple to the United States in 1965 for help saving Nubian monuments.",
+    "Reassembled inside The Metropolitan Museum of Art in 1978 inside the new Sackler Wing.",
+    "Dedicated to brothers Pediese and Pihor — deified after drowning in the Nile.",
+    "Augustus is depicted wearing the double crown of Egypt, offering to Isis and Osiris.",
+    "The only Roman emperor whose cartouche appears in hieroglyphs.",
+    "Original painted pigments — red, blue, and yellow — are still faintly visible on the stones.",
+  ];
+  let factIdx = 0, factTimer = null, placed = false;
+
+  const templeRoot = document.getElementById('temple-root');
+  const hudBottom  = document.getElementById('hud-bottom');
+  const hudTop     = document.getElementById('hud-top');
+  const factBox    = document.getElementById('fact-box');
+  const factText   = document.getElementById('fact-text');
+  const btnReset   = document.getElementById('btn-reset');
+  const loading    = document.getElementById('loading');
+
+  // Hide loader
+  function hideLoader() {
+    loading.classList.add('fade');
+    setTimeout(() => loading.style.display = 'none', 1000);
+  }
+  document.getElementById('scene').addEventListener('loaded', () => setTimeout(hideLoader, 1500));
+  setTimeout(hideLoader, 5000);
+
+  function showFact() {
+    factText.style.opacity = 0;
+    setTimeout(() => {
+      factText.textContent = facts[factIdx % facts.length];
+      factText.style.transition = 'opacity 0.7s';
+      factText.style.opacity = 1;
+      factIdx++;
+    }, 350);
+  }
+
+  function placeTemple() {
+    if (placed) return;
+    placed = true;
+    templeRoot.setAttribute('visible', true);
+    templeRoot.setAttribute('scale', '0.01 0.01 0.01');
+    templeRoot.setAttribute('animation', 'property:scale; to:1 1 1; dur:900; easing:easeOutBack;');
+    hudBottom.classList.add('hide');
+    setTimeout(() => {
+      hudTop.classList.add('show');
+      factBox.classList.add('show');
+      btnReset.style.display = 'block';
+      showFact();
+      factTimer = setInterval(showFact, 7000);
+    }, 700);
+  }
+
+  function resetTemple() {
+    placed = false;
+    templeRoot.setAttribute('visible', false);
+    templeRoot.removeAttribute('animation');
+    hudBottom.classList.remove('hide');
+    hudTop.classList.remove('show');
+    factBox.classList.remove('show');
+    btnReset.style.display = 'none';
+    if (factTimer) { clearInterval(factTimer); factTimer = null; }
+  }
+
+  // Tapping the scene also places
+  document.getElementById('scene').addEventListener('click', () => { if (!placed) placeTemple(); });
+</script>
+
+</body>
+</html>
